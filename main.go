@@ -52,7 +52,7 @@ func main() {
 		AllowMethods: []string{echo.GET, echo.HEAD, echo.PUT, echo.PATCH, echo.POST, echo.DELETE},
 	}))
 	// Server
-	e.GET("/api/players/:id", GetPlayer)
+	e.GET("/v2/players/:id", GetPlayer)
 	e.GET("/health", Health)
 	e.Logger.Fatal(e.Start(":9999"))
 
