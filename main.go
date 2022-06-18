@@ -44,7 +44,7 @@ func main() {
 	})
 	e.Use(middleware.Recover())
 
-	e.Static("/static", "assets")
+	e.Static("/static", "assets/api-docs")
 
 	//CORS
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
