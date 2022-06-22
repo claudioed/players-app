@@ -1,9 +1,17 @@
 package main
 
 import (
-	"github.com/labstack/echo"
-	"github.com/labstack/echo/middleware"
+	"context"
+	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 	"github.com/rs/zerolog"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/labstack/echo/otelecho"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	stdout "go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
+	"go.opentelemetry.io/otel/propagation"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	oteltrace "go.opentelemetry.io/otel/trace"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -12,6 +20,8 @@ import (
 
 var log *zerolog.Logger
 
+var tracer = otel.Tracer("echo-server")
+
 func init() {
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 	output := zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339}
@@ -19,10 +29,25 @@ func init() {
 	log = &logger
 }
 
+func initTracer() (*sdktrace.TracerProvider, error) {
+	exporter, err := stdout.New(stdout.WithPrettyPrint())
+	if err != nil {
+		return nil, err
+	}
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithSampler(sdktrace.AlwaysSample()),
+		sdktrace.WithBatcher(exporter),
+	)
+	otel.SetTracerProvider(tp)
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
+	return tp, nil
+}
+
 func main() {
 	e := echo.New()
 	// Middleware
 	e.Logger.SetOutput(ioutil.Discard)
+	e.Use(middleware.Recover())
 	e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) (err error) {
 			req := c.Request()
@@ -42,17 +67,28 @@ func main() {
 			return
 		}
 	})
-	e.Use(middleware.Recover())
 
 	e.Static("/static", "assets/api-docs")
 
-	//CORS
-	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins: []string{"*"},
-		AllowMethods: []string{echo.GET, echo.HEAD, echo.PUT, echo.PATCH, echo.POST, echo.DELETE},
-	}))
+	tp, err := initTracer()
+	if err != nil {
+		log.Panic()
+	}
+	defer func() {
+		if err := tp.Shutdown(context.Background()); err != nil {
+			log.Printf("Error shutting down tracer provider: %v", err)
+		}
+	}()
+
+	e.Use(otelecho.Middleware("player"))
+	e.HTTPErrorHandler = func(err error, c echo.Context) {
+		ctx := c.Request().Context()
+		oteltrace.SpanFromContext(ctx).RecordError(err)
+		e.DefaultHTTPErrorHandler(err, c)
+	}
+
 	// Server
-	e.GET("/v2/players/:id", GetPlayer)
+	e.GET("/api/players/:id", GetPlayer)
 	e.GET("/health", Health)
 	e.Logger.Fatal(e.Start(":9999"))
 
@@ -67,6 +103,9 @@ type HealthData struct {
 }
 
 func GetPlayer(c echo.Context) error {
+	id := c.Param("id")
+	_, span := tracer.Start(c.Request().Context(), "getUser", oteltrace.WithAttributes(attribute.String("id", id)))
+	defer span.End()
 	p := &Player{
 		Name:  "Joe Doe",
 		Email: "joe@doe.com",
