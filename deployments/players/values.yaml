@@ -5,10 +5,10 @@
 replicaCount: 1
 
 image:
-  repository: claudioed/players:otel
+  repository: claudioed/players
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "v1"
+  tag: "otel"
 
 imagePullSecrets: []
 nameOverride: ""
