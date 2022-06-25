@@ -104,7 +104,7 @@ type HealthData struct {
 
 func GetPlayer(c echo.Context) error {
 	id := c.Param("id")
-	_, span := tracer.Start(c.Request().Context(), "getUser", oteltrace.WithAttributes(attribute.String("id", id)))
+	_, span := tracer.Start(c.Request().Context(), "getPlayer", oteltrace.WithAttributes(attribute.String("id", id)))
 	defer span.End()
 	p := &Player{
 		Name:  "Joe Doe",
