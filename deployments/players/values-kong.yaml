@@ -51,6 +51,7 @@ ingress:
   annotations:
     kubernetes.io/ingress.class: "kong"
     konghq.com/override: players-do-not-preserve-host
+    konghq.com/plugins: prometheus-players,players-otel
 
   hosts:
     - paths:
